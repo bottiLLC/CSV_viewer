@@ -265,4 +265,3 @@ def test_app_initial_file_loads_data(tmp_path: Path) -> None:
     assert app.raw_df is not None
     assert len(app.raw_df) == 1
     assert app.current_file_path == csv_file
-
