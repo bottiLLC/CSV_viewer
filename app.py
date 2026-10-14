@@ -13,8 +13,8 @@ import pandas as pd
 
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
 
-
 MAX_PREVIEW_ROWS: Final[int] = 1000
+
 
 
 class CsvViewerApp:
