@@ -18,9 +18,16 @@ dev = [
     "ruff>=0.9.0",
 ]
 
+[tool.uv]
+package = false
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["app.py", "csv_service.py"]
+
 
 [tool.ruff]
 target-version = "py313"
