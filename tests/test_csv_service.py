@@ -63,7 +63,7 @@ def test_load_csv_cp932_fallback_success(tmp_path: Path) -> None:
 def test_load_csv_unsupported_encoding_raises_encoding_error(tmp_path: Path) -> None:
     # Arrange: どのエンコーディングでもパースできないバイナリ
     csv_file = tmp_path / "corrupt.csv"
-    csv_file.write_bytes(b"\x80\xFF\xFE\xFD\xFC\xFB")
+    csv_file.write_bytes(b"\x80\xff\xfe\xfd\xfc\xfb")
 
     # Act & Assert
     with pytest.raises(CsvEncodingError, match="サポート対象の文字コード"):

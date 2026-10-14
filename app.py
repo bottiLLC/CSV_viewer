@@ -16,7 +16,6 @@ from csv_service import CsvEncodingError, CsvService, CsvServiceError
 MAX_PREVIEW_ROWS: Final[int] = 1000
 
 
-
 class CsvViewerApp:
     """CSV閲覧・検索・XLSX出力を担当するTkinter GUIプレゼンテーション層。
 
@@ -181,9 +180,7 @@ class CsvViewerApp:
             confirmed_path = CsvService.export_to_xlsx(
                 self.display_df, Path(save_target)
             )
-            messagebox.showinfo(
-                "出力完了", f"正常に出力されました:\n{confirmed_path}"
-            )
+            messagebox.showinfo("出力完了", f"正常に出力されました:\n{confirmed_path}")
         except CsvServiceError as err:
             messagebox.showerror("エクスポート失敗", str(err))
 
