@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  lint-test:
+    name: Lint, Type Check & Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install project and dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run Ruff Lint
+        run: uv run ruff check .
+
+      - name: Run Ruff Format Check
+        run: uv run ruff format --check .
+
+      - name: Run Mypy Strict Type Check
+        run: uv run mypy .
+
+      - name: Run Pytest with Branch Coverage
+        run: uv run pytest --cov=csv_service --cov-branch --cov-report=term-missing --cov-fail-under=90
