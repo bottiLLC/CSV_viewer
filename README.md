@@ -1,6 +1,7 @@
 ![CI](https://img.shields.io/badge/CI-passing-brightgreen)
-![Python](https://img.shields.io/badge/Python-3.13-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.14%20%7C%203.13-blue.svg)
 ![License](https://img.shields.io/badge/License-Private-red.svg)
+
 
 ## Overview
 Tkinterとpandasで構築された、文字コード自動判別・高速リテラル文字列検索・XLSX任意パス直接書き出しに対応した軽量デスクトップCSVビューア治具。
