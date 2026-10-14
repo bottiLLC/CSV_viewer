@@ -22,7 +22,7 @@ class CsvViewerApp:
     ビジネスロジックは CsvService に完全委譲し、UIイベントと描画管理に専任する。
     """
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, initial_file: Path | None = None) -> None:
         self.root: tk.Tk = root
         self.root.title("CSVビューア")
         self.root.geometry("960x600")
@@ -33,6 +33,9 @@ class CsvViewerApp:
         self.display_df: pd.DataFrame | None = None
 
         self._build_ui()
+
+        if initial_file is not None:
+            self.load_file(initial_file)
 
     def _build_ui(self) -> None:
         """GUIコンポーネント（ツールバー、テーブル、ステータスバー）を構築する。"""
@@ -109,16 +112,8 @@ class CsvViewerApp:
         table_container.rowconfigure(0, weight=1)
         table_container.columnconfigure(0, weight=1)
 
-    def on_load_csv(self) -> None:
-        """ファイルダイアログからCSVを選択し、データをロードして描画する。"""
-        selected = filedialog.askopenfilename(
-            title="CSVファイルを選択",
-            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-        )
-        if not selected:
-            return
-
-        file_path = Path(selected)
+    def load_file(self, file_path: Path) -> None:
+        """指定パスのCSVファイルを読み込み、テーブル描画および操作部を活性化する。"""
         try:
             self.raw_df = CsvService.load_csv(file_path)
             self.current_file_path = file_path
@@ -130,6 +125,17 @@ class CsvViewerApp:
             self._update_status(f"読込完了: {file_path.name}")
         except (CsvEncodingError, CsvServiceError) as err:
             messagebox.showerror("読込エラー", str(err))
+
+    def on_load_csv(self) -> None:
+        """ファイルダイアログからCSVを選択し、データをロードして描画する。"""
+        selected = filedialog.askopenfilename(
+            title="CSVファイルを選択",
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+        )
+        if not selected:
+            return
+
+        self.load_file(Path(selected))
 
     def on_search(self) -> None:
         """入力されたクエリでDataFrameを走査し、結果テーブルを更新する。"""
@@ -223,6 +229,10 @@ class CsvViewerApp:
 
 
 if __name__ == "__main__":
+    init_path: Path | None = None
+    if len(sys.argv) > 1 and sys.argv[1].strip():
+        init_path = Path(sys.argv[1].strip())
+
     root_window = tk.Tk()
-    app = CsvViewerApp(root_window)
+    app = CsvViewerApp(root_window, initial_file=init_path)
     root_window.mainloop()

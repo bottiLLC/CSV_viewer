@@ -129,9 +129,9 @@ echo.
 
 findstr /i "streamlit" pyproject.toml >nul 2>&1
 if %errorlevel% equ 0 (
-    uv run streamlit run "%ENTRY_POINT%" --server.headless false
+    uv run streamlit run "%ENTRY_POINT%" --server.headless false %*
 ) else (
-    uv run python "%ENTRY_POINT%"
+    uv run python "%ENTRY_POINT%" %*
 )
 
 if %errorlevel% neq 0 (

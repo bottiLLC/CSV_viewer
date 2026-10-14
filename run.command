@@ -121,9 +121,9 @@ echo "[INFO] Launching $ENTRY_POINT ..."
 echo ""
 
 if grep -qi "streamlit" pyproject.toml 2>/dev/null; then
-    uv run streamlit run "$ENTRY_POINT" --server.headless false
+    uv run streamlit run "$ENTRY_POINT" --server.headless false "$@"
 else
-    uv run python "$ENTRY_POINT"
+    uv run python "$ENTRY_POINT" "$@"
 fi
 
 if [ $? -ne 0 ]; then

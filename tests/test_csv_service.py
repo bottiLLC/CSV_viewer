@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
+from app import CsvViewerApp
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
 
 
@@ -248,3 +249,20 @@ def test_export_to_xlsx_unexpected_exception_raises_csv_service_error(
         ),
     ):
         CsvService.export_to_xlsx(df, target)
+
+
+def test_app_initial_file_loads_data(tmp_path: Path) -> None:
+    # Arrange
+    csv_file = tmp_path / "init.csv"
+    csv_file.write_text("a,b\n10,20\n", encoding="utf-8")
+    mock_root = MagicMock()
+
+    # Act
+    with patch.object(CsvViewerApp, "_build_ui"):
+        app = CsvViewerApp(mock_root, initial_file=csv_file)
+
+    # Assert
+    assert app.raw_df is not None
+    assert len(app.raw_df) == 1
+    assert app.current_file_path == csv_file
+
