@@ -1,238 +1,261 @@
 from __future__ import annotations
 
 import sys
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
-from typing import Final
 
 # 決定論的モジュール解決のためのsys.path事前設定
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from typing import Final
+
 import pandas as pd
+import streamlit as st
 
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
 
-MAX_PREVIEW_ROWS: Final[int] = 1000
+APP_TITLE: Final[str] = "CSV Viewer"
+APP_ICON: Final[str] = "📊"
+APP_VERSION: Final[str] = "v0.2.0"
 
 
-class CsvViewerApp:
-    """CSV閲覧・検索・XLSX出力を担当するTkinter GUIプレゼンテーション層。
+def get_initial_file_from_args() -> Path | None:
+    """コマンドライン引数から指定された初期CSVパスを取得する。
 
-    ビジネスロジックは CsvService に完全委譲し、UIイベントと描画管理に専任する。
+    Returns:
+        有効な実在ファイルパス、または指定がない/存在しない場合はNone。
     """
+    if len(sys.argv) > 1:
+        candidate = Path(sys.argv[1])
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
 
-    def __init__(self, root: tk.Tk, initial_file: Path | None = None) -> None:
-        self.root: tk.Tk = root
-        self.root.title("CSVビューア")
-        self.root.geometry("960x600")
-        self.root.minsize(720, 480)
 
-        self.current_file_path: Path | None = None
-        self.raw_df: pd.DataFrame | None = None
-        self.display_df: pd.DataFrame | None = None
+@st.cache_data(show_spinner=False)
+def cached_load_csv_from_path(file_path: Path) -> pd.DataFrame:
+    """指定パスのCSVをキャッシュ化して読み込む。
 
-        self._build_ui()
+    Args:
+        file_path: 読み込み対象のPath。
 
-        if initial_file is not None:
-            self.load_file(initial_file)
+    Returns:
+        読み込まれたDataFrame。
+    """
+    return CsvService.load_csv(file_path)
 
-    def _build_ui(self) -> None:
-        """GUIコンポーネント（ツールバー、テーブル、ステータスバー）を構築する。"""
-        # 操作ツールバー（上部）
-        toolbar = ttk.Frame(self.root, padding=6)
-        toolbar.pack(fill=tk.X, side=tk.TOP)
 
-        btn_open = ttk.Button(toolbar, text="CSVを開く", command=self.on_load_csv)
-        btn_open.pack(side=tk.LEFT, padx=4)
+@st.cache_data(show_spinner=False)
+def cached_load_csv_from_bytes(data: bytes) -> pd.DataFrame:
+    """バイト列のCSVをキャッシュ化して読み込む。
 
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(
-            side=tk.LEFT, fill=tk.Y, padx=8, pady=2
+    Args:
+        data: アップロードされたCSVバイト列。
+
+    Returns:
+        読み込まれたDataFrame。
+    """
+    return CsvService.load_csv(data)
+
+
+def render_sidebar() -> tuple[pd.DataFrame | None, str]:
+    """サイドバーの入力ウィジェット群を描画し、読み込まれたDataFrameと識別名を返す。
+
+    Returns:
+        (DataFrameまたは未ロード時None, ファイル名または未ロード時空文字)
+    """
+    with st.sidebar:
+        st.header("⚙️ データソース")
+        mode = st.radio(
+            "読込方法",
+            ["ファイルアップロード", "ローカルパス指定"],
+            horizontal=True,
+            help="CSVの指定方法を選択します。",
         )
 
-        ttk.Label(toolbar, text="検索:").pack(side=tk.LEFT, padx=2)
-        self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(
-            toolbar, textvariable=self.search_var, width=24, state=tk.DISABLED
-        )
-        self.search_entry.pack(side=tk.LEFT, padx=4)
-        self.search_entry.bind("<Return>", lambda _event: self.on_search())
+        df: pd.DataFrame | None = None
+        file_label: str = ""
 
-        self.btn_search = ttk.Button(
-            toolbar, text="検索", command=self.on_search, state=tk.DISABLED
-        )
-        self.btn_search.pack(side=tk.LEFT, padx=2)
-
-        self.btn_clear = ttk.Button(
-            toolbar, text="解除", command=self.on_clear_search, state=tk.DISABLED
-        )
-        self.btn_clear.pack(side=tk.LEFT, padx=2)
-
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(
-            side=tk.LEFT, fill=tk.Y, padx=8, pady=2
-        )
-
-        self.btn_export = ttk.Button(
-            toolbar,
-            text="xlsxで書き出し",
-            command=self.on_export_xlsx,
-            state=tk.DISABLED,
-        )
-        self.btn_export.pack(side=tk.LEFT, padx=4)
-
-        # ステータスバー（下部）
-        self.lbl_status = ttk.Label(
-            self.root,
-            text="CSVファイルを読み込んでください",
-            relief=tk.SUNKEN,
-            anchor=tk.W,
-            padding=4,
-        )
-        self.lbl_status.pack(fill=tk.X, side=tk.BOTTOM)
-
-        # テーブル表示領域（中央）
-        table_container = ttk.Frame(self.root)
-        table_container.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
-
-        self.tree = ttk.Treeview(
-            table_container, show="headings", selectmode="extended"
-        )
-        v_scroll = ttk.Scrollbar(
-            table_container, orient=tk.VERTICAL, command=self.tree.yview
-        )
-        h_scroll = ttk.Scrollbar(
-            table_container, orient=tk.HORIZONTAL, command=self.tree.xview
-        )
-        self.tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        v_scroll.grid(row=0, column=1, sticky="ns")
-        h_scroll.grid(row=1, column=0, sticky="ew")
-
-        table_container.rowconfigure(0, weight=1)
-        table_container.columnconfigure(0, weight=1)
-
-    def load_file(self, file_path: Path) -> None:
-        """指定パスのCSVファイルを読み込み、テーブル描画および操作部を活性化する。"""
-        try:
-            self.raw_df = CsvService.load_csv(file_path)
-            self.current_file_path = file_path
-            self.display_df = self.raw_df.copy()
-            self.search_var.set("")
-
-            self._set_controls_state(tk.NORMAL)
-            self._render_treeview()
-            self._update_status(f"読込完了: {file_path.name}")
-        except (CsvEncodingError, CsvServiceError) as err:
-            messagebox.showerror("読込エラー", str(err))
-
-    def on_load_csv(self) -> None:
-        """ファイルダイアログからCSVを選択し、データをロードして描画する。"""
-        selected = filedialog.askopenfilename(
-            title="CSVファイルを選択",
-            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-        )
-        if not selected:
-            return
-
-        self.load_file(Path(selected))
-
-    def on_search(self) -> None:
-        """入力されたクエリでDataFrameを走査し、結果テーブルを更新する。"""
-        if self.raw_df is None:
-            return
-
-        query = self.search_var.get()
-        self.display_df = CsvService.search_dataframe(self.raw_df, query)
-        self._render_treeview()
-
-        match_count = len(self.display_df)
-        total_count = len(self.raw_df)
-        if query.strip():
-            self._update_status(
-                f"検索実行: '{query}' ({match_count}/{total_count} 件一致)"
+        if mode == "ファイルアップロード":
+            uploaded_file = st.file_uploader(
+                "CSVファイルを選択",
+                type=["csv"],
+                help="UTF-8(BOM付き/無し)およびCP932(Shift-JIS)に自動対応",
             )
+            if uploaded_file is not None:
+                file_label = uploaded_file.name
+                try:
+                    df = cached_load_csv_from_bytes(uploaded_file.getvalue())
+                except CsvEncodingError as err:
+                    st.error(f"文字コード判定エラー: {err!s}")
+                except CsvServiceError as err:
+                    st.error(f"読み込みエラー: {err!s}")
         else:
-            self._update_status(f"全件表示中 ({total_count} 件)")
+            default_path_str = ""
+            init_path = get_initial_file_from_args()
+            if init_path is not None:
+                default_path_str = str(init_path)
 
-    def on_clear_search(self) -> None:
-        """検索条件をリセットして全行表示に復帰する。"""
-        if self.raw_df is None:
-            return
-
-        self.search_var.set("")
-        self.display_df = self.raw_df.copy()
-        self._render_treeview()
-        self._update_status(f"検索解除 (全 {len(self.raw_df)} 件)")
-
-    def on_export_xlsx(self) -> None:
-        """表示中（検索フィルタ反映済）のデータをユーザー指定パスへXLSX出力する。"""
-        if self.display_df is None or self.current_file_path is None:
-            return
-
-        default_stem = self.current_file_path.stem
-        suggested_name = f"{default_stem}_export.xlsx"
-
-        save_target = filedialog.asksaveasfilename(
-            title="Excelファイルとして保存",
-            initialfile=suggested_name,
-            defaultextension=".xlsx",
-            filetypes=[("Excel Files", "*.xlsx")],
-        )
-        if not save_target:
-            return
-
-        try:
-            confirmed_path = CsvService.export_to_xlsx(
-                self.display_df, Path(save_target)
+            path_input = st.text_input(
+                "ローカルCSVパス",
+                value=default_path_str,
+                placeholder="C:/path/to/data.csv",
+                help="読み込みたいCSVファイルの絶対パスまたは相対パスを入力します。",
             )
-            messagebox.showinfo("出力完了", f"正常に出力されました:\n{confirmed_path}")
+            if path_input.strip():
+                target_path = Path(path_input.strip())
+                file_label = target_path.name
+                try:
+                    df = cached_load_csv_from_path(target_path)
+                except CsvEncodingError as err:
+                    st.error(f"文字コード判定エラー: {err!s}")
+                except CsvServiceError as err:
+                    st.error(f"読み込みエラー: {err!s}")
+
+        st.divider()
+        st.caption(f"{APP_TITLE} {APP_VERSION} | MIT License")
+        st.caption("Powered by Streamlit & Pandas")
+
+    return df, file_label
+
+
+def render_search_form(current_query: str) -> str:
+    """検索キーワード入力フォームを描画し、確定されたクエリ文字列を返す。
+
+    Args:
+        current_query: 現在適用されている検索クエリ。
+
+    Returns:
+        確定された検索クエリ。
+    """
+    with st.form("search_form", clear_on_submit=False):
+        st.subheader("1. 検索・絞り込み")
+        col_input, col_btn = st.columns([5, 1])
+        with col_input:
+            new_query = st.text_input(
+                "検索キーワード",
+                value=current_query,
+                placeholder="全列横断リテラル部分一致検索（大文字・小文字不問）",
+                help="正規表現メタ文字（[]、.*など）も安全に完全リテラルとして検索されます。",
+            )
+        with col_btn:
+            st.write("")
+            st.write("")
+            submitted = st.form_submit_button("検索実行", type="primary")
+
+    if submitted:
+        return new_query
+    return current_query
+
+
+def render_preview_and_export(
+    raw_df: pd.DataFrame,
+    display_df: pd.DataFrame,
+    file_label: str,
+) -> None:
+    """統計メトリクス、XLSXエクスポートボタン、テーブルおよびセル詳細インスペクタを描画する。
+
+    Args:
+        raw_df: 全件の元DataFrame。
+        display_df: 検索フィルタ後の表示対象DataFrame。
+        file_label: 読み込み元ファイル名。
+    """
+    st.subheader("2. データプレビュー & エクスポート")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("総レコード数", f"{len(raw_df):,} 行")
+    m2.metric("抽出件数", f"{len(display_df):,} 行")
+    m3.metric("総列数", f"{len(display_df.columns):,} 列")
+
+    stem = Path(file_label).stem if file_label else "export"
+    with m4:
+        st.write("")
+        try:
+            xlsx_bytes = CsvService.export_to_xlsx_bytes(display_df)
+            st.download_button(
+                label="📥 XLSXエクスポート",
+                data=xlsx_bytes,
+                file_name=f"{stem}_export.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="secondary",
+                help="表示中の検索絞り込みデータをExcel（.xlsx）形式でダウンロードします。",
+            )
         except CsvServiceError as err:
-            messagebox.showerror("エクスポート失敗", str(err))
+            st.error(f"XLSX生成失敗: {err!s}")
 
-    def _render_treeview(self) -> None:
-        """Treeviewの列見出しとデータ行を再構築する（描画負荷防止リミット適用）。"""
-        self.tree.delete(*self.tree.get_children())
-        if self.display_df is None:
-            return
+    st.caption(
+        "💡 表内の列ヘッダーをドラッグして列幅を自由に調整できます。"
+        "また、行をクリックして選択すると下部のインスペクタで長文セルの全文を確認できます。"
+    )
 
-        columns = list(self.display_df.columns)
-        self.tree["columns"] = columns
+    selection = st.dataframe(
+        display_df,
+        use_container_width=True,
+        height=420,
+        on_select="rerun",
+        selection_mode="single-row",
+    )
 
-        for col in columns:
-            self.tree.heading(col, text=str(col))
-            self.tree.column(col, width=120, minwidth=60, anchor=tk.W)
+    selected_rows = selection.selection.rows
+    if selected_rows:
+        selected_row_idx = selected_rows[0]
+        row_series = display_df.iloc[selected_row_idx]
+        st.subheader("🔍 選択行の長文・セル詳細インスペクタ")
+        st.caption(f"選択行インデックス: {display_df.index[selected_row_idx]}")
+        for col in display_df.columns:
+            val_str = str(row_series[col])
+            with st.expander(
+                f"列: **{col}** ({len(val_str):,} 文字)",
+                expanded=(len(val_str) > 40),
+            ):
+                st.text_area(
+                    label=f"{col} の値",
+                    value=val_str,
+                    height=min(300, max(80, len(val_str.splitlines()) * 24)),
+                    disabled=True,
+                    label_visibility="collapsed",
+                )
 
-        # UIフリーズ防止のための最大プレビュー件数制御
-        preview_data = self.display_df.head(MAX_PREVIEW_ROWS).values.tolist()
-        for row in preview_data:
-            self.tree.insert("", tk.END, values=row)
 
-    def _set_controls_state(self, state: str) -> None:
-        """検索・出力関連ウィジェットの活性/非活性を一括制御する。"""
-        self.search_entry.config(state=state)
-        self.btn_search.config(state=state)
-        self.btn_clear.config(state=state)
-        self.btn_export.config(state=state)
+def main() -> None:
+    """Streamlit アプリケーションのエントリーポイント。"""
+    st.set_page_config(
+        page_title=APP_TITLE,
+        page_icon=APP_ICON,
+        layout="wide",
+    )
 
-    def _update_status(self, message: str) -> None:
-        """ステータスバーのメッセージを更新する。"""
-        if self.display_df is not None and self.raw_df is not None:
-            total = len(self.raw_df)
-            current = len(self.display_df)
-            rendered = min(current, MAX_PREVIEW_ROWS)
-            self.lbl_status.config(
-                text=f"{message} | 表示: {rendered}/{current}件 (元データ: {total}件)"
-            )
-        else:
-            self.lbl_status.config(text=message)
+    st.title(f"{APP_ICON} {APP_TITLE}")
+    st.caption("長文セル全文閲覧・文字コード自動判別・リテラル検索・XLSX出力治具")
+
+    df, file_label = render_sidebar()
+
+    if df is None:
+        st.info(
+            "👈 サイドバーからCSVファイルをアップロードするか、"
+            "ファイルパスを指定してください。"
+        )
+        st.stop()
+
+    if "search_query" not in st.session_state:
+        st.session_state["search_query"] = ""
+
+    current_query: str = str(st.session_state["search_query"])
+    new_query = render_search_form(current_query)
+
+    if new_query != current_query:
+        st.session_state["search_query"] = new_query
+        current_query = new_query
+
+    if current_query:
+        col_clear, _ = st.columns([1, 6])
+        with col_clear:
+            if st.button("検索条件クリア", type="secondary"):
+                st.session_state["search_query"] = ""
+                st.rerun()
+
+    display_df = CsvService.search_dataframe(df, current_query)
+    render_preview_and_export(df, display_df, file_label)
 
 
 if __name__ == "__main__":
-    init_path: Path | None = None
-    if len(sys.argv) > 1 and sys.argv[1].strip():
-        init_path = Path(sys.argv[1].strip())
-
-    root_window = tk.Tk()
-    app = CsvViewerApp(root_window, initial_file=init_path)
-    root_window.mainloop()
+    main()

@@ -1,7 +1,7 @@
 [project]
 name = "csv-viewer"
-version = "0.1.0"
-description = "A lightweight desktop CSV viewer with multi-encoding fallback, literal string search, and direct XLSX export."
+version = "0.2.0"
+description = "A lightweight desktop CSV viewer with Streamlit, multi-encoding fallback, literal string search, cell inspection, and XLSX export."
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "openpyxl>=3.1.2",
     "pandas>=2.2.0",
+    "streamlit>=1.40.0",
 ]
 
 [project.optional-dependencies]

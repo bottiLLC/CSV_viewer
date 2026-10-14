@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
-from app import CsvViewerApp
+from app import get_initial_file_from_args
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
 
 
@@ -27,6 +28,16 @@ def test_load_csv_empty_file_raises_error(tmp_path: Path) -> None:
     # Act & Assert
     with pytest.raises(CsvServiceError, match="ファイルが空です"):
         CsvService.load_csv(empty_file)
+
+
+def test_load_csv_whitespace_only_raises_empty_data_error(tmp_path: Path) -> None:
+    # Arrange: 非0バイトだがデータ列が存在しない空白行のみのファイル
+    whitespace_file = tmp_path / "whitespace.csv"
+    whitespace_file.write_text("   \n\n\t\n", encoding="utf-8")
+
+    # Act & Assert
+    with pytest.raises(CsvServiceError, match="ファイルが空です"):
+        CsvService.load_csv(whitespace_file)
 
 
 def test_load_csv_utf8_sig_success(tmp_path: Path) -> None:
@@ -251,15 +262,109 @@ def test_export_to_xlsx_unexpected_exception_raises_csv_service_error(
         CsvService.export_to_xlsx(df, target)
 
 
-def test_app_initial_file_triggers_load_file(tmp_path: Path) -> None:
+def test_load_csv_bytes_utf8_success() -> None:
     # Arrange
-    csv_file = tmp_path / "init.csv"
-    mock_root = MagicMock()
+    raw_bytes = "col1,col2\nx,y\n".encode("utf-8-sig")
+
+    # Act
+    df = CsvService.load_csv(raw_bytes)
+
+    # Assert
+    assert list(df.columns) == ["col1", "col2"]
+    assert len(df) == 1
+    assert df.iloc[0]["col1"] == "x"
+
+
+def test_load_csv_bytes_cp932_fallback_success() -> None:
+    # Arrange
+    raw_bytes = "製品,単価\n部品A,500\n".encode("cp932")
+
+    # Act
+    df = CsvService.load_csv(raw_bytes)
+
+    # Assert
+    assert list(df.columns) == ["製品", "単価"]
+    assert len(df) == 1
+    assert df.iloc[0]["製品"] == "部品A"
+
+
+def test_load_csv_bytes_empty_raises_error() -> None:
+    # Act & Assert
+    with pytest.raises(CsvServiceError, match="ファイルが空です: アップロードデータ"):
+        CsvService.load_csv(b"")
+
+
+def test_load_csv_path_read_bytes_os_error_raises_csv_service_error(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    csv_file = tmp_path / "unreadable.csv"
+    csv_file.write_text("a,b\n1,2\n", encoding="utf-8")
 
     # Act & Assert
     with (
-        patch.object(CsvViewerApp, "_build_ui"),
-        patch.object(CsvViewerApp, "load_file") as mock_load,
+        patch("pathlib.Path.read_bytes", side_effect=PermissionError("Read blocked")),
+        pytest.raises(
+            CsvServiceError, match="ファイル読み込み中にエラーが発生しました"
+        ),
     ):
-        CsvViewerApp(mock_root, initial_file=csv_file)
-        mock_load.assert_called_once_with(csv_file)
+        CsvService.load_csv(csv_file)
+
+
+def test_export_to_xlsx_bytes_success() -> None:
+    # Arrange
+    df = pd.DataFrame({"colA": [1, 2], "colB": ["alpha", "beta"]})
+
+    # Act
+    xlsx_bytes = CsvService.export_to_xlsx_bytes(df)
+
+    # Assert
+    assert isinstance(xlsx_bytes, bytes)
+    assert len(xlsx_bytes) > 0
+    loaded_df = pd.read_excel(io.BytesIO(xlsx_bytes), engine="openpyxl")
+    assert list(loaded_df.columns) == ["colA", "colB"]
+    assert len(loaded_df) == 2
+
+
+def test_export_to_xlsx_bytes_unexpected_exception_raises_csv_service_error() -> None:
+    # Arrange
+    df = pd.DataFrame({"col": [1]})
+
+    # Act & Assert
+    with (
+        patch.object(
+            pd.DataFrame, "to_excel", side_effect=RuntimeError("Excel buffer error")
+        ),
+        pytest.raises(
+            CsvServiceError, match="XLSX書き出し中に予期しないエラーが発生しました"
+        ),
+    ):
+        CsvService.export_to_xlsx_bytes(df)
+
+
+def test_app_get_initial_file_from_args_valid_file(tmp_path: Path) -> None:
+    # Arrange
+    csv_file = tmp_path / "init.csv"
+    csv_file.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    # Act & Assert
+    with patch("sys.argv", ["app.py", str(csv_file)]):
+        result = get_initial_file_from_args()
+        assert result == csv_file.resolve()
+
+
+def test_app_get_initial_file_from_args_non_existent(tmp_path: Path) -> None:
+    # Arrange
+    non_existent = tmp_path / "absent.csv"
+
+    # Act & Assert
+    with patch("sys.argv", ["app.py", str(non_existent)]):
+        result = get_initial_file_from_args()
+        assert result is None
+
+
+def test_app_get_initial_file_from_args_no_args() -> None:
+    # Act & Assert
+    with patch("sys.argv", ["app.py"]):
+        result = get_initial_file_from_args()
+        assert result is None
