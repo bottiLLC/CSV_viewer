@@ -1,6 +1,4 @@
-![CI](https://img.shields.io/badge/CI-passing-brightgreen)
-![Python](https://img.shields.io/badge/Python-3.14%20%7C%203.13-blue.svg)
-![License](https://img.shields.io/badge/License-Private-red.svg)
+[![CI](https://github.com/bottiLLC/CSV_viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/bottiLLC/CSV_viewer/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/Python-3.14%20%7C%203.13-blue.svg)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 
 ## Overview
@@ -34,4 +32,4 @@ uv run python app.py
 - **ステートレス運用**: 本ツールはセッションや履歴の永続化を行わず、ファイルを開くたびにメモリ上で展開する仕様（ローカルルール `AGENTS.md` にて `./data` 隔離対象外に設定）。
 
 ---
-Copyright (c) LLC Bocchi. All rights reserved.
+Copyright (c) 2026 LLC Bocchi. Released under the [MIT License](LICENSE).
