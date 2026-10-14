@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Final
+
 import pandas as pd
 
 DEFAULT_ENCODINGS: Final[tuple[str, ...]] = ("utf-8-sig", "cp932", "utf-8")
@@ -48,10 +49,13 @@ class CsvService:
             except pd.errors.EmptyDataError as err:
                 raise CsvServiceError(f"ファイルが空です: {resolved_path}") from err
             except Exception as err:
-                raise CsvServiceError(f"CSV読み込み中にエラーが発生しました: {err!s}") from err
+                msg = f"CSV読み込み中にエラーが発生しました: {err!s}"
+                raise CsvServiceError(msg) from err
 
+        enc_list = ", ".join(DEFAULT_ENCODINGS)
         raise CsvEncodingError(
-            f"サポート対象の文字コード（{', '.join(DEFAULT_ENCODINGS)}）でデコードできませんでした: {resolved_path}"
+            f"サポート対象の文字コード（{enc_list}）で"
+            f"デコードできませんでした: {resolved_path}"
         )
 
     @staticmethod
@@ -101,6 +105,8 @@ class CsvService:
             df.to_excel(resolved_target, index=False, engine="openpyxl")
             return resolved_target
         except OSError as err:
-            raise CsvServiceError(f"ファイル書き込み権限エラーまたはパスが無効です: {err!s}") from err
+            msg = f"ファイル書き込み権限エラーまたはパスが無効です: {err!s}"
+            raise CsvServiceError(msg) from err
         except Exception as err:
-            raise CsvServiceError(f"XLSX書き出し中に予期しないエラーが発生しました: {err!s}") from err
+            msg = f"XLSX書き出し中に予期しないエラーが発生しました: {err!s}"
+            raise CsvServiceError(msg) from err

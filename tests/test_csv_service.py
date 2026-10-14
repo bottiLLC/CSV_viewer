@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
+
 import pandas as pd
 import pytest
-
-# テスト実行時のsys.path補正
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
 
@@ -229,7 +226,9 @@ def test_export_to_xlsx_os_error_raises_csv_service_error(tmp_path: Path) -> Non
     # Act & Assert
     with (
         patch("pathlib.Path.mkdir", side_effect=PermissionError("Permission denied")),
-        pytest.raises(CsvServiceError, match="ファイル書き込み権限エラーまたはパスが無効です"),
+        pytest.raises(
+            CsvServiceError, match="ファイル書き込み権限エラーまたはパスが無効です"
+        ),
     ):
         CsvService.export_to_xlsx(df, target)
 
@@ -244,6 +243,8 @@ def test_export_to_xlsx_unexpected_exception_raises_csv_service_error(
     # Act & Assert
     with (
         patch.object(pd.DataFrame, "to_excel", side_effect=RuntimeError("Excel crash")),
-        pytest.raises(CsvServiceError, match="XLSX書き出し中に予期しないエラーが発生しました"),
+        pytest.raises(
+            CsvServiceError, match="XLSX書き出し中に予期しないエラーが発生しました"
+        ),
     ):
         CsvService.export_to_xlsx(df, target)

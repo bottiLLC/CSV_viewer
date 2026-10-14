@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
+import sys
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from typing import Final
 
 # 決定論的モジュール解決のためのsys.path事前設定
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from typing import Final
 import pandas as pd
+
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
 
 MAX_PREVIEW_ROWS: Final[int] = 1000
@@ -90,7 +91,9 @@ class CsvViewerApp:
         table_container = ttk.Frame(self.root)
         table_container.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
-        self.tree = ttk.Treeview(table_container, show="headings", selectmode="extended")
+        self.tree = ttk.Treeview(
+            table_container, show="headings", selectmode="extended"
+        )
         v_scroll = ttk.Scrollbar(
             table_container, orient=tk.VERTICAL, command=self.tree.yview
         )
