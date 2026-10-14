@@ -130,14 +130,14 @@ echo.
 findstr /i "streamlit" pyproject.toml >nul 2>&1
 if %errorlevel% equ 0 (
     uv run streamlit run "%ENTRY_POINT%" --server.headless false %*
+    if %errorlevel% neq 0 (
+        echo.
+        echo [WARNING] Application stopped or encountered an error.
+        echo.
+        pause
+    )
 ) else (
-    uv run python "%ENTRY_POINT%" %*
+    start "" uv run pythonw "%ENTRY_POINT%" %*
+    exit /b 0
 )
 
-if %errorlevel% neq 0 (
-    echo.
-    echo [WARNING] Application stopped or encountered an error.
-)
-
-echo.
-pause
