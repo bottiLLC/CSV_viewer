@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Final
 
@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pandas as pd
 
 from csv_service import CsvEncodingError, CsvService, CsvServiceError
+
 
 MAX_PREVIEW_ROWS: Final[int] = 1000
 
